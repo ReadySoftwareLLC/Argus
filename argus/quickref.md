@@ -30,6 +30,7 @@ GitHub issues via `gh`. Epic = parent issue, stories = sub-issues. State = label
 | `costs` | rollup and budget guard (unknown is not zero) |
 | `index [--sql ...]` | rebuild or query the SQLite index |
 | `pricing` | rate file age, fails when stale |
+| `sync [--from src] [--dry-run\|--verify]` | vendor/update `argus/`, record `argus.lock` |
 
 ## Files per story: `<orchestration>/<issue>/`
 `requirements.md` `prompt.md` `diff.diff` `review.md` `final-report.json` `status.json`. Ledger: `<orchestration>/ledger.jsonl`.

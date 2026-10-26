@@ -57,7 +57,7 @@ Built from one real `~/.copilot/session-state/<session-id>/events.jsonl` (3 API 
 ## Cost accuracy rules
 - A cost with a `note` is a lower bound. `argus costs` counts it and lists it under `partial_cost_stories`.
 - Unknown cost is never zero. It appears under `unknown_cost_stories`.
-- The budget guard halts when known cost reaches `limits.epic_budget_usd`. It also reports when the total is incomplete.
+- The budget guard halts when known cost reaches `limits.epic_budget_usd`. `argus plan` and `argus claim` run it before dispatch (nothing is claimed when it halts). It also reports when the total is incomplete, and AIU/credit spend is listed as uncounted because it is never converted to dollars. The ledger is per solution, so the budget covers that solution's ledger.
 - The latest report per issue supersedes earlier ones.
 
 ## Ledger events

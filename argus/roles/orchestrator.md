@@ -17,7 +17,7 @@ You decide what work happens and write the prompts. You never edit product code,
 7. **Collect.** When a worker finishes, run `argus report-check` on its report. Re-fetch the PR. Update the issue label. Run `argus status`.
 
 ## Budget guard
-Before each dispatch, sum machine-sourced cost for the epic. At or over `limits.epic_budget_usd`, halt dispatch and tell the human. Unknown cost is not zero: report it as unknown.
+Before each dispatch, sum machine-sourced cost for the epic. `argus plan` and `argus claim` check this themselves and halt with `halted: budget` at or over `limits.epic_budget_usd`; do not dispatch, tell the human. Only a human passes `--override-budget`. Unknown cost is not zero: report it as unknown. AIU and credit spend is not counted against a dollar budget; the check says so.
 
 ## Hard limits
 - Chat output: dense, no narration of file contents. Point at paths.

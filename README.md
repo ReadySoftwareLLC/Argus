@@ -10,7 +10,7 @@ Everything persists to disk, so sessions resume. GitHub issues are the work trac
 Status: **v0.2**. Claude Code and Copilot CLI telemetry, pricing, the ledger and SQLite index are in. VS Code Copilot Chat logs are not parsed. See [docs/telemetry.md](docs/telemetry.md) and the roadmap in [docs/architecture.md](docs/architecture.md).
 
 ## Use it in a repo
-1. Copy the `argus/` folder into the repo (or vendor it; `argus sync` arrives in v0.3). Do not edit vendored files. Customize through `template_dir`.
+1. Vendor the `argus/` folder: `node <argus checkout>/argus/tools/argus.mjs sync --from <git url or checkout> [--ref <tag>]`. This writes `argus.lock` (source, commit, version, a hash per file). Do not edit vendored files; customize through `template_dir`. See [docs/sync.md](docs/sync.md).
 2. Copy `argus/argus.config.example.json` to the anchor repo root as `argus.config.json` and fill it in. Schema: `argus/schema/config.schema.json`.
 3. Check it: `node argus/tools/argus.mjs config`
 4. Scaffold a story: `node argus/tools/argus.mjs init 12`
