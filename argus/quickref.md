@@ -25,9 +25,14 @@ GitHub issues via `gh`. Epic = parent issue, stories = sub-issues. State = label
 | `claim <issue>` | claim protocol, earliest claim wins |
 | `status [--refresh]` | rebuild the board in `status.md` |
 | `report-check <report.json>` | enforce the final-report contract |
+| `telemetry --claude <log> --merge <report>` | machine telemetry into the report |
+| `ledger add <report>` | append to `ledger.jsonl` |
+| `costs` | rollup and budget guard (unknown is not zero) |
+| `index [--sql ...]` | rebuild or query the SQLite index |
+| `pricing` | rate file age, fails when stale |
 
 ## Files per story: `<orchestration>/<issue>/`
-`requirements.md` `prompt.md` `diff.diff` `review.md` `final-report.json` `status.json`
+`requirements.md` `prompt.md` `diff.diff` `review.md` `final-report.json` `status.json`. Ledger: `<orchestration>/ledger.jsonl`.
 
 ## Load order
 Orchestrator: this file, `roles/orchestrator.md`, config. Worker: this file, `roles/worker.md`, its prompt. Everything else on demand.

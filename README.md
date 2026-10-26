@@ -7,7 +7,7 @@ A product-agnostic toolkit for running software work with AI agents in two tiers
 
 Everything persists to disk, so sessions resume. GitHub issues are the work tracker. Argus contains no product knowledge: each consuming repo supplies one `argus.config.json`.
 
-Status: **v0.1**. Telemetry parsers, pricing, and the learning loop are on the roadmap in [docs/architecture.md](docs/architecture.md).
+Status: **v0.2**. Claude Code telemetry, pricing, the ledger and SQLite index are in. Copilot parsing is blocked on a real log sample. See [docs/telemetry.md](docs/telemetry.md) and the roadmap in [docs/architecture.md](docs/architecture.md).
 
 ## Use it in a repo
 1. Copy the `argus/` folder into the repo (or vendor it; `argus sync` arrives in v0.3). Do not edit vendored files. Customize through `template_dir`.
@@ -28,6 +28,7 @@ Requires Node 22.13 or later and the `gh` CLI for tracker commands. No npm depen
 | `templates/` | Worker prompt, code review, requirements, status, parking list |
 | `contracts/final-report.md` | Report contract, enforced by `argus report-check` |
 | `schema/config.schema.json` | Documented config schema |
+| `pricing/` | Versioned rate files, checked against Claude Code's own recorded cost |
 | `tools/` | Zero-dependency CLI |
 | `adapters/` | Host mapping (Claude Code, generic) |
 

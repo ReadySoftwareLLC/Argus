@@ -1,0 +1,46 @@
+{
+  "provider": "anthropic",
+  "unit": "usd_per_million_tokens",
+  "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
+  "retrieved": "2026-10-26",
+  "verified_against": "Claude Code cost-state rows: claude-sonnet-5-5 reproduces totalCostUSD exactly (see docs/telemetry.md)",
+  "geo_multipliers": { "global": 1, "us": 1.1 },
+  "models": {
+    "claude-sonnet-5-5": {
+      "name": "Claude Sonnet 5.5",
+      "rates": [
+        { "effective_from": null, "tiers": [ { "max_prompt_tokens": null, "input": 2, "output": 10, "cache_read": 0.1, "cache_write_5m": 2.5, "cache_write_1h": 4 } ] }
+      ]
+    },
+    "claude-opus-5-5": {
+      "name": "Claude Opus 5.5",
+      "rates": [
+        { "effective_from": null, "tiers": [ { "max_prompt_tokens": null, "input": 4, "output": 20, "cache_read": 0.2, "cache_write_5m": 5, "cache_write_1h": 8 } ] }
+      ]
+    },
+    "claude-haiku-5-5": {
+      "name": "Claude Haiku 5.5",
+      "rates": [
+        {
+          "effective_from": null,
+          "tiers": [
+            { "max_prompt_tokens": 100000, "input": 0.1, "output": 0.5, "cache_read": 0.01, "cache_write_5m": 0.125, "cache_write_1h": 0.2 },
+            { "max_prompt_tokens": null, "input": 0.5, "output": 2.5, "cache_read": 0.05, "cache_write_5m": 0.625, "cache_write_1h": 1 }
+          ]
+        }
+      ]
+    },
+    "claude-fable-5-1": {
+      "name": "Claude Fable 5.1",
+      "rates": [
+        { "effective_from": null, "tiers": [ { "max_prompt_tokens": null, "input": 10, "output": 50, "cache_read": 0.25, "cache_write_5m": 12.5, "cache_write_1h": 20 } ] }
+      ]
+    },
+    "claude-sonnet-4-6": {
+      "name": "Claude Sonnet 4.6",
+      "rates": [
+        { "effective_from": null, "tiers": [ { "max_prompt_tokens": null, "input": 3, "output": 15, "cache_read": 0.3, "cache_write_5m": 3.75, "cache_write_1h": 6 } ] }
+      ]
+    }
+  }
+}

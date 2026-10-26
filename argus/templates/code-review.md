@@ -1,3 +1,4 @@
+<!-- argus-template: code-review v1 -->
 # Code review task: {{issue}} {{title}}
 
 You are the reviewer. Read `{{argus_dir}}/roles/reviewer.md` first. You report only; you do not edit code.

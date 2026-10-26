@@ -10,6 +10,9 @@ import { buildPlan, launchPlan } from './lib/plan.mjs';
 import { checkReport } from './lib/report.mjs';
 import { createTracker } from './lib/tracker.mjs';
 import { readEntries, renderBoard, writeBoard, refreshEntry } from './lib/status.mjs';
+import { buildClaudeTelemetry, buildCopilotTelemetry } from './lib/telemetry.mjs';
+import { loadPricing, pricingAgeDays } from './lib/pricing.mjs';
+import { appendEvent, budgetCheck, eventFromReport, indexPath, ledgerPath, queryIndex, readEvents, rebuildIndex, rollup, templateFromPrompt } from './lib/ledger.mjs';
 
 const toolDir = path.dirname(fileURLToPath(import.meta.url));
 const argusDir = path.resolve(toolDir, '..');
@@ -25,6 +28,12 @@ const HELP = `argus <command> [options]
   claim <issue> --worker <id>         claim protocol (earliest claim wins)
   status [--refresh]                  rebuild the board in status.md
   report-check <report.json>          enforce the final-report contract
+  telemetry --claude <log.jsonl>      machine telemetry from a Claude Code transcript
+         [--numstat f] [--junit f] [--merge <final-report.json>] | --host copilot
+  ledger add <final-report.json>      append the story to ledger.jsonl (idempotent)
+  costs                               rollup + budget guard (unknown cost is not zero)
+  index [--sql "SELECT ..."]          rebuild or query the SQLite index
+  pricing [--max-age-days N]          rate file age; fails when stale
 
 global: --config <path>  --json`;
 
@@ -146,6 +155,57 @@ const commands = {
     print({ wrote: path.relative(config._base, statusFile), stories: entries.length, refreshed: Boolean(args.flags.refresh) });
   },
 
+  telemetry(args) {
+    const f = args.flags;
+    if (f.host === 'copilot') return print(buildCopilotTelemetry());
+    if (!f.claude) throw new ArgusError('usage: argus telemetry --claude <log.jsonl> [--numstat f] [--junit f] [--merge report.json] [--pricing f]  |  --host copilot');
+    const read = (p) => (p ? fs.readFileSync(p, 'utf8') : undefined);
+    const pricing = loadPricing(f.pricing ?? path.join(argusDir, 'pricing', 'anthropic.json'));
+    const res = buildClaudeTelemetry({ transcript: fs.readFileSync(f.claude, 'utf8'), pricing, numstat: read(f.numstat), junit: read(f.junit) });
+    if (f.merge) {
+      const report = readJson(f.merge);
+      report.telemetry = res.telemetry;
+      writeFileEnsured(f.merge, `${JSON.stringify(report, null, 2)}\n`);
+      return print({ merged: f.merge, extras: res.extras });
+    }
+    print(res);
+  },
+
+  async ledger(args) {
+    if (args._[1] !== 'add' || !args._[2]) throw new ArgusError('usage: argus ledger add <final-report.json>');
+    const config = load(args.flags);
+    const report = readJson(args._[2]);
+    const errs = checkReport(report);
+    if (errs.length) throw new ArgusError(`Report fails the contract, not recorded:\n${errs.map((e) => `  - ${e}`).join('\n')}`);
+    const promptFile = path.join(storyDir(config, report.issue), 'prompt.md');
+    const template = templateFromPrompt(fs.existsSync(promptFile) ? fs.readFileSync(promptFile, 'utf8') : null);
+    print(appendEvent(ledgerPath(config), eventFromReport(report, { template })));
+  },
+
+  costs(args) {
+    const config = load(args.flags);
+    const roll = rollup(readEvents(ledgerPath(config)));
+    const budget = budgetCheck(roll, config.limits.epic_budget_usd);
+    print({ rollup: roll, budget });
+    if (budget.over_budget) process.exitCode = 1;
+  },
+
+  async index(args) {
+    const config = load(args.flags);
+    if (args.flags.sql) return print(await queryIndex(indexPath(config), args.flags.sql));
+    print(await rebuildIndex(readEvents(ledgerPath(config)), indexPath(config)));
+  },
+
+  pricing(args) {
+    const file = args.flags.file ?? path.join(argusDir, 'pricing', 'anthropic.json');
+    const p = loadPricing(file);
+    const age = pricingAgeDays(p);
+    const max = Number(args.flags['max-age-days'] ?? 30);
+    const stale = age === null || age > max;
+    print({ file: path.relative(process.cwd(), file), source_url: p.source_url, retrieved: p.retrieved, age_days: age, max_age_days: max, stale, models: Object.keys(p.models), action: stale ? `Rates may be stale. Re-fetch ${p.source_url}, update the file, and confirm with: argus telemetry --claude <transcript>` : 'ok' });
+    if (stale) process.exitCode = 1;
+  },
+
   'report-check'(args) {
     const file = args._[1];
     if (!file) throw new ArgusError('usage: argus report-check <report.json>');
@@ -155,17 +215,17 @@ const commands = {
   },
 };
 
-export function main(argv) {
+export async function main(argv) {
   const args = parseArgs(argv);
   const cmd = args._[0];
   if (!cmd || cmd === 'help' || args.flags.help) return print(HELP);
   if (!commands[cmd]) throw new ArgusError(`Unknown command: ${cmd}\n\n${HELP}`);
-  commands[cmd](args);
+  await commands[cmd](args);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    main(process.argv.slice(2));
+    await main(process.argv.slice(2));
   } catch (e) {
     process.stderr.write(`argus: ${e.message}\n`);
     process.exit(e instanceof ArgusError ? e.code : 2);
