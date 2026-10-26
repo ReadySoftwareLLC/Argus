@@ -6,7 +6,7 @@ export const TELEMETRY_KEYS = [
 ];
 const OUTCOMES = ['done', 'blocked', 'halted'];
 const STATUSES = ['met', 'unmet', 'unverifiable'];
-const COST_UNITS = ['usd_api_equivalent', 'credits'];
+const COST_UNITS = ['usd_api_equivalent', 'aiu', 'credits'];
 
 const isObj = (v) => v && typeof v === 'object' && !Array.isArray(v);
 

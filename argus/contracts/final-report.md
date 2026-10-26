@@ -34,9 +34,9 @@ Anything else fails the check. A missing field fails. A guessed number labeled `
 Guidance:
 - `files_changed`, `lines_*`: `--numstat <file>` from `git diff --numstat`, machine.
 - `tests_*`: `--junit <file>` from the test runner's junit.xml, machine.
-- `tokens_*`, `cost`, `duration_seconds`, `model`, `reasoning_effort`: `argus telemetry --claude <session-log> --merge <final-report.json>`. No parser for the host (Copilot today): `null` with a reason.
+- `tokens_*`, `cost`, `duration_seconds`, `model`, `reasoning_effort`: `argus telemetry --claude <session-log> --merge <final-report.json>`. Copilot: `argus telemetry --host copilot --log <events.jsonl> --merge <final-report.json>`. No parser for the host: `null` with a reason.
 - Run `argus telemetry` as the last step, after the final tool call, so the cost snapshot is as current as possible. Any gap is reported in the field `note`.
-- `cost_unit`: `usd_api_equivalent` or `credits`. Credits are never converted to dollars.
+- `cost_unit`: `usd_api_equivalent` (Claude), `aiu` (Copilot, as reported), or `credits` (a value the user converted). AIU and credits are never converted to dollars by Argus.
 - `model`, `reasoning_effort`: machine if read from the session log, otherwise `self_reported`. Never a guess.
 
 ## Pass condition

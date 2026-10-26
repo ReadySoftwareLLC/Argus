@@ -69,7 +69,7 @@ export function latestPerIssue(events) {
 
 export function rollup(events) {
   const stories = latestPerIssue(events);
-  const out = { stories: stories.length, cost: { usd_api_equivalent: 0, credits: 0 }, unknown_cost_stories: [], partial_cost_stories: [], by_template: {}, outcomes: {} };
+  const out = { stories: stories.length, cost: { usd_api_equivalent: 0, aiu: 0, credits: 0 }, unknown_cost_stories: [], partial_cost_stories: [], by_template: {}, outcomes: {} };
   for (const s of stories) {
     out.outcomes[s.outcome] = (out.outcomes[s.outcome] ?? 0) + 1;
     const key = s.template_name ? `${s.template_name}@v${s.template_version}` : 'unknown-template';

@@ -25,7 +25,7 @@ GitHub issues via `gh`. Epic = parent issue, stories = sub-issues. State = label
 | `claim <issue>` | claim protocol, earliest claim wins |
 | `status [--refresh]` | rebuild the board in `status.md` |
 | `report-check <report.json>` | enforce the final-report contract |
-| `telemetry --claude <log> --merge <report>` | machine telemetry into the report |
+| `telemetry --claude <log>` or `--host copilot --log <f>`, `--merge <report>` | machine telemetry into the report |
 | `ledger add <report>` | append to `ledger.jsonl` |
 | `costs` | rollup and budget guard (unknown is not zero) |
 | `index [--sql ...]` | rebuild or query the SQLite index |
