@@ -18,6 +18,13 @@ export function labelFor(config, state) {
   return `${config.tracker.label_prefix ?? 'argus:'}${state}`;
 }
 
+/** Create (or update, idempotently) the state labels and the epic label in the tracker repo. */
+export function ensureLabels(config, run = ghRunner) {
+  const names = [...STATES.map((s) => labelFor(config, s)), config.tracker.epic_label ?? 'epic'];
+  for (const n of names) run(['label', 'create', n, '--repo', config.tracker.repo, '--force']);
+  return names;
+}
+
 export function claimBody(workerId, now = new Date()) {
   return `${CLAIM_MARKER}:${workerId}:${now.toISOString()}`;
 }

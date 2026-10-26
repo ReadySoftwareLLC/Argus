@@ -8,10 +8,12 @@ import { discoverConfig, loadConfig, requirementsPath, storyDir, applicablePolic
 import { findTemplate, renderTemplate, lintPrompt } from './lib/render.mjs';
 import { buildPlan, launchPlan } from './lib/plan.mjs';
 import { checkReport } from './lib/report.mjs';
-import { createTracker } from './lib/tracker.mjs';
+import { createTracker, ensureLabels } from './lib/tracker.mjs';
+import { buildOnboardConfig, ensureGitignore, parseAlso } from './lib/onboard.mjs';
 import { readEntries, renderBoard, writeBoard, refreshEntry } from './lib/status.mjs';
 import { buildClaudeTelemetry, buildCopilotTelemetry } from './lib/telemetry.mjs';
 import { loadPricing, pricingAgeDays } from './lib/pricing.mjs';
+import { exportLedger, loadPrimary, readImports, solutionId } from './lib/export.mjs';
 import { appendEvent, budgetCheck, eventFromReport, indexPath, ledgerPath, queryIndex, readEvents, rebuildIndex, rollup, templateFromPrompt } from './lib/ledger.mjs';
 
 const toolDir = path.dirname(fileURLToPath(import.meta.url));
@@ -19,6 +21,8 @@ const argusDir = path.resolve(toolDir, '..');
 
 const HELP = `argus <command> [options]
 
+  onboard --name <n> [--tracker o/r] [--anchor k] [--also k=path,...] [--primary p]
+         [--labels] [--dry-run] [--force]   write argus.config.json from detected facts (nothing guessed)
   config [--policies]                 resolve + validate config
   init <issue>                        scaffold <orchestration>/<issue>/ and base files
   render <template> --data <f.json>   fill a template; fails on any missing field
@@ -33,7 +37,9 @@ const HELP = `argus <command> [options]
   telemetry --host copilot --log <events.jsonl> [same options]   (AIU, never dollars)
   ledger add <final-report.json>      append the story to ledger.jsonl (idempotent)
   costs                               rollup + budget guard (unknown cost is not zero)
-  index [--sql "SELECT ..."]          rebuild or query the SQLite index
+  index [--sql "SELECT ..."] [--no-imports]
+                                      rebuild or query the SQLite index
+  export                              copy this ledger to the "primary" solution (one way)
   pricing [--max-age-days N]          rate file age; fails when stale
 
 global: --config <path>  --json`;
@@ -69,6 +75,24 @@ export function derivedFields(config, issue, data) {
 }
 
 const commands = {
+  onboard(args) {
+    const f = args.flags;
+    const base = path.resolve(typeof f.base === 'string' ? f.base : process.cwd());
+    const file = path.join(base, 'argus.config.json');
+    const { config, evidence, unset } = buildOnboardConfig({
+      base, name: typeof f.name === 'string' ? f.name : undefined, tracker: typeof f.tracker === 'string' ? f.tracker : undefined,
+      anchor: typeof f.anchor === 'string' ? f.anchor : undefined, also: parseAlso(typeof f.also === 'string' ? f.also : ''),
+      primary: typeof f.primary === 'string' ? f.primary : undefined,
+    });
+    if (f['dry-run']) return print({ dry_run: true, would_write: file, config, evidence, unset });
+    if (fs.existsSync(file) && !f.force) throw new ArgusError(`${file} already exists. Edit it, or pass --force to replace it.`);
+    writeFileEnsured(file, `${JSON.stringify(config, null, 2)}\n`);
+    const gitignore = ensureGitignore(base);
+    let labels = null;
+    if (f.labels) labels = ensureLabels(loadConfig({ path: file, via: 'onboard' }));
+    print({ wrote: file, evidence, unset, gitignore_updated: gitignore, labels: labels ?? 'not created (pass --labels to create them with gh)', next: ['argus config', 'argus init <issue>'] });
+  },
+
   config(args) {
     const config = load(args.flags);
     if (args.flags.policies) return print(applicablePolicies(config, []));
@@ -201,10 +225,20 @@ const commands = {
     if (budget.over_budget) process.exitCode = 1;
   },
 
+  export(args) {
+    const config = load(args.flags);
+    const primary = loadPrimary(config);
+    print({ ...exportLedger(config, primary), primary: solutionId(primary), action: 'Commit the file in the primary solution, then run `argus index` there.' });
+  },
+
   async index(args) {
     const config = load(args.flags);
     if (args.flags.sql) return print(await queryIndex(indexPath(config), args.flags.sql));
-    print(await rebuildIndex(readEvents(ledgerPath(config)), indexPath(config)));
+    // Own events are stamped with this solution's id so queries can group by solution. Imports are
+    // other solutions' events exported to this one; they never touch costs or the budget.
+    const own = readEvents(ledgerPath(config)).map((e) => ({ ...e, solution: solutionId(config) }));
+    const imported = args.flags['no-imports'] ? [] : readImports(config);
+    print({ ...(await rebuildIndex([...own, ...imported], indexPath(config))), own: own.length, imported: imported.length });
   },
 
   pricing(args) {
