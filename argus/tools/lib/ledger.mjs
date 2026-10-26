@@ -100,11 +100,14 @@ export function budgetCheck(roll, limitUsd) {
   return {
     limit_usd: limitUsd ?? null,
     known_cost_usd: known,
+    remaining_usd: limitUsd == null ? null : Math.max(0, limitUsd - known),
+    // AIU and credits are never converted to dollars, so a dollar budget cannot see them.
+    uncounted_units: Object.fromEntries(['aiu', 'credits'].filter((u) => roll.cost[u] > 0).map((u) => [u, roll.cost[u]])),
     unknown_cost_stories: unknown,
     partial_cost_stories: partial,
-    complete: unknown === 0 && partial === 0,
+    complete: unknown === 0 && partial === 0 && !(roll.cost.aiu > 0 || roll.cost.credits > 0),
     over_budget: limitUsd == null ? false : known >= limitUsd,
-    message: limitUsd == null ? 'no budget set' : known >= limitUsd ? 'halt dispatch: known cost is at or over budget' : unknown || partial ? 'under budget on known cost, but some story costs are unknown or lower bounds' : 'under budget',
+    message: limitUsd == null ? 'no budget set' : known >= limitUsd ? 'halt dispatch: known cost is at or over budget' : unknown || partial ? 'under budget on known cost, but some story costs are unknown or lower bounds' : roll.cost.aiu > 0 || roll.cost.credits > 0 ? 'under budget on dollar cost, but AIU/credit spend is not counted against a dollar budget' : 'under budget',
   };
 }
 

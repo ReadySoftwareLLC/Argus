@@ -123,3 +123,50 @@ test('derivedFields uses repo paths from config', () => {
   assert.deepEqual(f.rules, ['docs/rules']);
   assert.equal(f.issue_url, 'https://github.com/acme-co/acme-web/issues/9');
 });
+
+function overBudgetSandbox(limit, cost, unit = 'usd_api_equivalent') {
+  const root = sandbox();
+  fs.writeFileSync(path.join(root, 'argus.config.json'), JSON.stringify({ ...example, limits: { ...example.limits, epic_budget_usd: limit } }));
+  const dir = path.join(root, example.orchestration_dir);
+  fs.mkdirSync(dir, { recursive: true });
+  const ev = { type: 'story_finished', issue: '9', ts: '2026-01-01T00:00:00Z', outcome: 'done', telemetry: { cost: { value: cost, source: 'machine', tool: 't' }, cost_unit: { value: unit, source: 'machine', tool: 't' } } };
+  fs.writeFileSync(path.join(dir, 'ledger.jsonl'), `${JSON.stringify(ev)}\n`);
+  const plan = path.join(root, 'plan.json');
+  fs.writeFileSync(plan, JSON.stringify({ stories: [{ id: '1' }] }));
+  return { root, plan };
+}
+
+test('dispatch guard: plan and claim halt when known cost is over budget, before touching the tracker', () => {
+  const { root, plan } = overBudgetSandbox(2, 2.5);
+  const p = run(root, 'plan', plan);
+  assert.equal(p.status, 1);
+  assert.equal(JSON.parse(p.stdout).halted, 'budget');
+  const c = run(root, 'claim', '5', '--worker', 'w1');
+  assert.equal(c.status, 1);
+  const out = JSON.parse(c.stdout);
+  assert.equal(out.halted, 'budget');
+  assert.equal(out.won, false);
+});
+
+test('dispatch guard: --override-budget is an explicit, visible bypass for plan', () => {
+  const { root, plan } = overBudgetSandbox(2, 2.5);
+  const p = run(root, 'plan', plan, '--override-budget');
+  assert.equal(p.status, 0, p.stderr);
+  assert.equal(JSON.parse(p.stdout).budget.over_budget, true);
+});
+
+test('dispatch guard: under budget plans normally and shows remaining headroom', () => {
+  const { root, plan } = overBudgetSandbox(10, 2.5);
+  const p = run(root, 'plan', plan);
+  assert.equal(p.status, 0, p.stderr);
+  assert.equal(JSON.parse(p.stdout).budget.remaining_usd, 7.5);
+});
+
+test('dispatch guard: AIU spend is surfaced, not silently counted as zero dollars', () => {
+  const { root, plan } = overBudgetSandbox(10, 5, 'aiu');
+  const b = JSON.parse(run(root, 'plan', plan).stdout).budget;
+  assert.equal(b.over_budget, false);
+  assert.equal(b.complete, false);
+  assert.deepEqual(b.uncounted_units, { aiu: 5 });
+  assert.match(b.message, /not counted against a dollar budget/);
+});

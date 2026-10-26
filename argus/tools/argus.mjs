@@ -12,6 +12,7 @@ import { createTracker } from './lib/tracker.mjs';
 import { readEntries, renderBoard, writeBoard, refreshEntry } from './lib/status.mjs';
 import { buildClaudeTelemetry, buildCopilotTelemetry } from './lib/telemetry.mjs';
 import { loadPricing, pricingAgeDays } from './lib/pricing.mjs';
+import { LOCK_NAME, hashTree, readLock, resolveSource, runSync, sourceArgusDir, verifyTree } from './lib/sync.mjs';
 import { appendEvent, budgetCheck, eventFromReport, indexPath, ledgerPath, queryIndex, readEvents, rebuildIndex, rollup, templateFromPrompt } from './lib/ledger.mjs';
 
 const toolDir = path.dirname(fileURLToPath(import.meta.url));
@@ -35,6 +36,8 @@ const HELP = `argus <command> [options]
   costs                               rollup + budget guard (unknown cost is not zero)
   index [--sql "SELECT ..."]          rebuild or query the SQLite index
   pricing [--max-age-days N]          rate file age; fails when stale
+  sync [--from <dir|git-url>] [--ref r] [--dry-run] [--verify] [--force]
+                                      vendor argus/ into this repo, record argus.lock
 
 global: --config <path>  --json`;
 
@@ -66,6 +69,11 @@ export function derivedFields(config, issue, data) {
     issue,
     issue_url: `https://github.com/${config.tracker.repo}/issues/${issue}`,
   };
+}
+
+/** Budget guard for dispatch. Reads the ledger fresh. Over budget halts; incomplete cost only warns. */
+export function dispatchBudget(config) {
+  return budgetCheck(rollup(readEvents(ledgerPath(config))), config.limits.epic_budget_usd);
 }
 
 const commands = {
@@ -122,9 +130,16 @@ const commands = {
     if (!file) throw new ArgusError('usage: argus plan <plan.json>');
     const config = load(args.flags);
     const res = buildPlan(readJson(file).stories ?? [], { maxConcurrent: config.limits.max_concurrent, repos: Object.keys(config.repos) });
+    const budget = dispatchBudget(config);
+    if (res.ok && budget.over_budget && !args.flags['override-budget']) {
+      print({ ok: false, halted: 'budget', budget, action: 'Known cost is at or over limits.epic_budget_usd. Do not dispatch. A human can raise the limit or pass --override-budget.' });
+      process.exitCode = 1;
+      return;
+    }
     if (res.ok && args.flags.launch) {
-      print(launchPlan(res, (id) => path.relative(config._base, path.join(storyDir(config, id), 'prompt.md'))));
-    } else print(res);
+      const launch = launchPlan(res, (id) => path.relative(config._base, path.join(storyDir(config, id), 'prompt.md')));
+      print(budget.limit_usd == null && budget.complete ? launch : `${launch}\nBudget: ${budget.message}${budget.remaining_usd == null ? '' : ` (remaining $${budget.remaining_usd.toFixed(2)})`}`);
+    } else print({ ...res, budget });
     if (!res.ok) process.exitCode = 1;
   },
 
@@ -132,8 +147,14 @@ const commands = {
     const issue = args._[1];
     if (!issue || !args.flags.worker) throw new ArgusError('usage: argus claim <issue> --worker <id> [--assignee <login>]');
     const config = load(args.flags);
+    const budget = dispatchBudget(config);
+    if (budget.over_budget && !args.flags['override-budget']) {
+      print({ won: false, halted: 'budget', budget, action: 'Known cost is at or over limits.epic_budget_usd. Nothing was claimed. A human can raise the limit or pass --override-budget.' });
+      process.exitCode = 1;
+      return;
+    }
     const res = createTracker(config).claim(issue, args.flags.worker, { assignee: args.flags.assignee });
-    print(res);
+    print(budget.complete || budget.limit_usd == null ? res : { ...res, budget_warning: budget.message });
     if (!res.won) process.exitCode = 1;
   },
 
@@ -205,6 +226,40 @@ const commands = {
     const config = load(args.flags);
     if (args.flags.sql) return print(await queryIndex(indexPath(config), args.flags.sql));
     print(await rebuildIndex(readEvents(ledgerPath(config)), indexPath(config)));
+  },
+
+  sync(args) {
+    const f = args.flags;
+    const base = path.resolve(f.base === true ? '.' : f.base ?? process.cwd());
+    const destDir = path.resolve(base, f.dest === true ? 'argus' : f.dest ?? 'argus');
+    const lockFile = path.resolve(base, f.lock === true ? LOCK_NAME : f.lock ?? LOCK_NAME);
+    const lock = readLock(lockFile);
+    if (f.verify) {
+      if (!lock) throw new ArgusError(`No ${path.basename(lockFile)} in ${base}. Run: argus sync --from <source>`);
+      const problems = verifyTree({ dest: hashTree(destDir), locked: lock.files });
+      print({ ok: problems.length === 0, version: lock.version, commit: lock.commit, problems, action: problems.length ? 'Vendored files differ from argus.lock. Move customizations to template_dir, then: argus sync --force' : 'ok' });
+      if (problems.length) process.exitCode = 1;
+      return;
+    }
+    const from = typeof f.from === 'string' ? f.from : lock?.source;
+    if (!from) throw new ArgusError('usage: argus sync --from <argus checkout or git url> [--ref r]. No argus.lock to take the source from.');
+    const ref = typeof f.ref === 'string' ? f.ref : typeof f.from === 'string' ? undefined : lock?.ref ?? undefined;
+    const src = resolveSource({ from, ref });
+    try {
+      const res = runSync({ srcDir: sourceArgusDir(src.dir), destDir, lockFile, source: { from, ref, commit: src.commit }, dryRun: Boolean(f['dry-run']), force: Boolean(f.force) });
+      const by = (a) => res.actions.filter((x) => x.action === a).map((x) => x.path);
+      const pending = ['add', 'update', 'remove'].some((a) => by(a).length);
+      print({
+        dry_run: Boolean(f['dry-run']), from, ref: ref ?? null, commit: res.lock.commit, version: res.lock.version, previous_version: res.prior?.version ?? null,
+        added: by('add'), updated: by('update'), removed: by('remove'), unchanged: by('unchanged').length,
+        conflicts: res.actions.filter((x) => x.action === 'conflict' || x.action === 'orphan').map((x) => ({ path: x.path, action: x.action, reason: x.reason })),
+        forced: Boolean(f.force && !f['dry-run']),
+      });
+      if (res.blocked.length) process.stderr.write(`argus: ${res.blocked.length} file(s) were edited locally and were left alone. Move customizations to template_dir; --force overwrites them.\n`);
+      if (res.blocked.length || (f['dry-run'] && pending)) process.exitCode = 1;
+    } finally {
+      src.cleanup();
+    }
   },
 
   pricing(args) {
