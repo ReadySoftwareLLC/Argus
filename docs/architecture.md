@@ -45,8 +45,8 @@ GitHub has no atomic claim. Claim comment plus `argus:claimed` label, then re-re
 | Version | Scope |
 | --- | --- |
 | v0.1 | This release: config, discovery track, roles, templates, CLI, claim, plan, report contract |
-| v0.2 | JSONL telemetry ledger, rebuildable SQLite index, Claude Code and Copilot log parsers, effective-dated pricing files and update workflow |
-| v0.3 | `argus sync` vendoring with `argus.lock`, onboarding skill, budget guard enforced in CLI, cross-solution export |
+| v0.2 | Shipped: JSONL ledger, rebuildable SQLite index, Claude Code parser, effective-dated pricing with drift check, budget guard rollup. Not shipped: Copilot parser (needs a real log sample), scheduled pricing-update workflow |
+| v0.3 | `argus sync` vendoring with `argus.lock`, onboarding skill, budget guard wired into dispatch, cross-solution export |
 | v0.4 | Prompt-learning loop: analyze outcomes by template version, propose template changes as PRs |
 
 ## Design decisions still open

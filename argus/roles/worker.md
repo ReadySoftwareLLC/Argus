@@ -11,7 +11,7 @@ You start cold. Your prompt file is your whole brief. You run one story end to e
 6. **Sub-agent review.** Render the task: `argus render code-review --story <issue> --data <data.json> --out <story_dir>/review-task.md`. Dispatch the reviewer through a real sub-agent call that reads that file. Save the output verbatim to `review.md`. No dispatch available: halt and write a blocked report. Never read the review template and "act as" the reviewer.
 7. **Fix.** Address every finding the reviewer rated blocking. Re-dispatch once. A second failed review: halt and escalate.
 8. **PR.** Open the PR linking the issue. Do not merge.
-9. **Report.** Write `final-report.json` per `contracts/final-report.md`, then `argus report-check`. Fix until it passes.
+9. **Report.** Write `final-report.json` per `contracts/final-report.md` without a telemetry block. Save `git diff --numstat` and the test runner's junit.xml to files. As your last step run `argus telemetry --claude <your session log> --numstat <f> --junit <f> --merge <final-report.json>`, then `argus report-check`, then `argus ledger add`. Fix until the check passes.
 
 ## Rules
 - Out-of-scope discoveries go to `parking-list.md`, one line each. Do not act on them.

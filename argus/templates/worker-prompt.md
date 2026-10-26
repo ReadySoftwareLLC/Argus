@@ -1,3 +1,4 @@
+<!-- argus-template: worker-prompt v1 -->
 # Worker task: {{issue}} {{title}}
 
 Role file: `{{argus_dir}}/roles/worker.md`. Read it first. This prompt is self-contained: do not rely on any chat history.

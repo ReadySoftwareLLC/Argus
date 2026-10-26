@@ -28,3 +28,6 @@ Concurrent stories come from `argus plan`. Never dispatch more than `limits.max_
 
 ## Manual mode
 When `host.dispatch` is `manual`, run `argus plan <plan.json> --launch`, show the output to the human, and stop. The human opens the sessions.
+
+## Telemetry source
+Claude Code writes the session log to `~/.claude/projects/<cwd with / replaced by ->/<session-id>.jsonl` (observed: cwd `/home/claude` gives `-home-claude`). The worker passes that path to `argus telemetry --claude`. The log contains Claude Code's own `cost-state` snapshots, which `argus` uses for cost and token totals. Copilot logs are not parsed yet.
