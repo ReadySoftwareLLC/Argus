@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "argus.config.schema.json",
+  "title": "Argus consumer config",
+  "description": "One file per solution, committed in the anchor repo. All product facts, policies and rules live here. Paths are relative to this file.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["config_version", "product", "orchestration_dir", "anchor", "repos", "tracker"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "config_version": { "const": 1, "description": "Schema version. Always 1 today." },
+    "product": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "description": "Human name of the solution." },
+        "facts_path": { "type": "string", "description": "Optional. File of product facts the agent reads during discovery." }
+      }
+    },
+    "orchestration_dir": { "type": "string", "minLength": 1, "description": "Where Argus writes status.md, parking-list.md and per-story folders." },
+    "requirements_dir": { "type": "string", "description": "Optional. Where requirements.md lives. Default: <orchestration_dir>/<issue>/. Argus reads it, never owns it." },
+    "template_dir": { "type": "string", "description": "Optional. Files here shadow same-named files under argus/templates/." },
+    "anchor": { "type": "string", "description": "Key in `repos` that holds this config." },
+    "repos": {
+      "type": "object",
+      "minProperties": 1,
+      "description": "Every repo in the solution, keyed by a short name.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path"],
+        "properties": {
+          "path": { "type": "string", "description": "Path to the repo root, relative to this file." },
+          "role": { "type": "string", "description": "Free text, e.g. ui, service, database." },
+          "github": { "type": "string", "pattern": "^[^/\\s]+/[^/\\s]+$", "description": "owner/name. Defaults to tracker.repo." },
+          "test_command": { "type": "string", "description": "Command the worker runs. Never assumed when absent." },
+          "rules_path": { "type": "string", "description": "Rules file or directory, relative to the repo root." },
+          "default_branch": { "type": "string" }
+        }
+      }
+    },
+    "tracker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "repo"],
+      "properties": {
+        "type": { "const": "github" },
+        "repo": { "type": "string", "pattern": "^[^/\\s]+/[^/\\s]+$", "description": "owner/name of the repo holding epics and stories." },
+        "epic_label": { "type": "string", "default": "epic" },
+        "label_prefix": { "type": "string", "default": "argus:" }
+      }
+    },
+    "policies": {
+      "type": "object",
+      "description": "Standing policies the agent never re-asks. See discovery/standing-policies.md.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "answer": { "type": "string" },
+          "file": { "type": "string" },
+          "applies_to": { "type": "array", "items": { "type": "string" } },
+          "source": { "type": "string" }
+        },
+        "oneOf": [{ "required": ["answer"] }, { "required": ["file"] }]
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "discovery_rounds": { "type": "integer", "minimum": 1, "default": 2 },
+        "max_concurrent": { "type": "integer", "minimum": 1, "default": 3 },
+        "epic_budget_usd": { "type": ["number", "null"], "minimum": 0, "default": null, "description": "null means no cap." },
+        "prompt_token_budget": { "type": "integer", "minimum": 200, "default": 2500, "description": "Max estimated tokens for a generated worker prompt." }
+      }
+    },
+    "models": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Optional per-role model hints passed to the host adapter.",
+      "properties": {
+        "orchestrator": { "type": "string" },
+        "worker": { "type": "string" },
+        "reviewer": { "type": "string" }
+      }
+    },
+    "host": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "dispatch": { "enum": ["claude-code", "manual"], "default": "manual" }
+      }
+    },
+    "primary": {
+      "type": "string",
+      "description": "Optional. Path to a primary solution's config. Cross-solution exports go there."
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "argus-orchestration",
+  "version": "0.1.0",
+  "description": "Product-agnostic AI orchestration toolkit: orchestrator and worker sessions, GitHub issues as tracker, everything on disk.",
+  "type": "module",
+  "license": "MIT",
+  "private": true,
+  "engines": { "node": ">=22.13" },
+  "bin": { "argus": "argus/tools/argus.mjs" },
+  "scripts": {
+    "test": "node --test \"test/*.test.mjs\""
+  }
+}

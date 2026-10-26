@@ -1,0 +1,43 @@
+{
+  "$schema": "./schema/config.schema.json",
+  "config_version": 1,
+  "product": { "name": "Acme Shop", "facts_path": "docs/product-facts.md" },
+  "orchestration_dir": "orchestration",
+  "anchor": "web",
+  "repos": {
+    "web": {
+      "path": ".",
+      "role": "ui",
+      "test_command": "npm test",
+      "rules_path": "docs/rules"
+    },
+    "api": {
+      "path": "../acme-api",
+      "role": "service",
+      "github": "acme-co/acme-api",
+      "test_command": "make test",
+      "rules_path": "docs/rules"
+    },
+    "db": {
+      "path": "../acme-db",
+      "role": "database",
+      "github": "acme-co/acme-db",
+      "test_command": "make migrate-test"
+    }
+  },
+  "tracker": { "type": "github", "repo": "acme-co/acme-web" },
+  "policies": {
+    "money-display": {
+      "answer": "Two decimals plus the currency code.",
+      "applies_to": ["ui"]
+    },
+    "audit-trail": { "file": "docs/policies/audit.md" }
+  },
+  "limits": {
+    "discovery_rounds": 2,
+    "max_concurrent": 3,
+    "epic_budget_usd": null,
+    "prompt_token_budget": 2500
+  },
+  "host": { "dispatch": "manual" }
+}
