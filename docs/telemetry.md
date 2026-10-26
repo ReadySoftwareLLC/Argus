@@ -67,3 +67,8 @@ Built from one real `~/.copilot/session-state/<session-id>/events.jsonl` (3 API 
 - **Copilot scope:** one short session was sampled. Not yet seen: sessions with sub-agents (`agentMetrics` only had `main`), records from other `sourceSessionId`s, a session that crashed without `session.shutdown`, and the VS Code `chatSessions` format.
 - **Sub-agent cost:** reviewer sub-agents may log elsewhere. Not verified whether their usage is inside the worker's `cost-state`.
 - **Duration:** taken from `totalDuration` as Claude Code reports it.
+
+## Cross-solution export
+A solution with `"primary": "<path to the primary solution's config>"` can run `argus export`. It writes this solution's ledger events, tagged with `solution` (its tracker repo) and `solution_name`, to `<primary orchestration_dir>/imports/<owner>__<repo>.jsonl`. The file is a full snapshot, so repeating it changes nothing. The flow is one way: the primary never writes back.
+
+In the primary, `argus index` loads its own events (tagged with its own tracker repo) plus the imports. Group by `solution` or by `template_name, template_version` to compare templates across products. Imports are never read by `argus costs`, so each solution's budget stays its own. Commit the imports file in the primary.

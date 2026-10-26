@@ -17,6 +17,7 @@ GitHub issues via `gh`. Epic = parent issue, stories = sub-issues. State = label
 ## Commands (`node argus/tools/argus.mjs <cmd>`)
 | cmd | use |
 | --- | --- |
+| `onboard --name n [--tracker o/r] [--also k=path] [--labels]` | write `argus.config.json` from detected facts, nothing guessed |
 | `config` | resolve and validate config, print result |
 | `init <issue>` | scaffold `<orchestration>/<issue>/` |
 | `render <template> --data f.json` | fill a template, fail on any missing field |
@@ -28,7 +29,8 @@ GitHub issues via `gh`. Epic = parent issue, stories = sub-issues. State = label
 | `telemetry --claude <log>` or `--host copilot --log <f>`, `--merge <report>` | machine telemetry into the report |
 | `ledger add <report>` | append to `ledger.jsonl` |
 | `costs` | rollup and budget guard (unknown is not zero) |
-| `index [--sql ...]` | rebuild or query the SQLite index |
+| `index [--sql ...]` | rebuild or query the SQLite index (includes imports) |
+| `export` | copy this ledger to the `primary` solution, one way |
 | `pricing` | rate file age, fails when stale |
 | `sync [--from src] [--dry-run\|--verify]` | vendor/update `argus/`, record `argus.lock` |
 

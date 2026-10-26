@@ -11,7 +11,7 @@ Status: **v0.2**. Claude Code and Copilot CLI telemetry, pricing, the ledger and
 
 ## Use it in a repo
 1. Vendor the `argus/` folder: `node <argus checkout>/argus/tools/argus.mjs sync --from <git url or checkout> [--ref <tag>]`. This writes `argus.lock` (source, commit, version, a hash per file). Do not edit vendored files; customize through `template_dir`. See [docs/sync.md](docs/sync.md).
-2. Copy `argus/argus.config.example.json` to the anchor repo root as `argus.config.json` and fill it in. Schema: `argus/schema/config.schema.json`.
+2. Create the config: `node argus/tools/argus.mjs onboard --name "My Product" [--tracker owner/repo] [--also api=../api,db=../db] [--labels]`. It fills only what it can detect and lists the rest as `unset`. Or copy `argus/argus.config.example.json`. Schema: `argus/schema/config.schema.json`. An agent can follow `argus/skills/onboarding/SKILL.md`.
 3. Check it: `node argus/tools/argus.mjs config`
 4. Scaffold a story: `node argus/tools/argus.mjs init 12`
 5. Start an orchestrator session with `argus/quickref.md` and `argus/roles/orchestrator.md`.

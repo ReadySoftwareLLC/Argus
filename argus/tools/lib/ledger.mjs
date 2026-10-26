@@ -122,18 +122,19 @@ export async function rebuildIndex(events, dbFile) {
     seq INTEGER PRIMARY KEY, ts TEXT, type TEXT, issue TEXT, outcome TEXT, review_verdict TEXT,
     template_name TEXT, template_version INTEGER, cost REAL, cost_unit TEXT, cost_reason TEXT,
     tokens_input INTEGER, tokens_output INTEGER, tokens_cache_read INTEGER, tokens_cache_write INTEGER,
-    duration_seconds REAL, json TEXT NOT NULL);
+    duration_seconds REAL, solution TEXT, json TEXT NOT NULL);
+    CREATE INDEX events_solution ON events(solution);
     CREATE INDEX events_issue ON events(issue);
     CREATE INDEX events_template ON events(template_name, template_version);`);
-  const ins = db.prepare(`INSERT INTO events (ts,type,issue,outcome,review_verdict,template_name,template_version,cost,cost_unit,cost_reason,tokens_input,tokens_output,tokens_cache_read,tokens_cache_write,duration_seconds,json)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+  const ins = db.prepare(`INSERT INTO events (ts,type,issue,outcome,review_verdict,template_name,template_version,cost,cost_unit,cost_reason,tokens_input,tokens_output,tokens_cache_read,tokens_cache_write,duration_seconds,solution,json)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
   for (const e of events) {
     const t = e.telemetry ?? {};
     ins.run(e.ts ?? null, e.type ?? null, e.issue ?? null, e.outcome ?? null, e.review_verdict ?? null, e.template_name ?? null, e.template_version ?? null,
       val(t.cost), val(t.cost_unit), t.cost?.reason ?? null, val(t.tokens_input), val(t.tokens_output), val(t.tokens_cache_read), val(t.tokens_cache_write),
-      val(t.duration_seconds), JSON.stringify(e));
+      val(t.duration_seconds), e.solution ?? null, JSON.stringify(e));
   }
-  db.exec('CREATE VIEW story_latest AS SELECT * FROM events e WHERE type = \'story_finished\' AND seq = (SELECT MAX(seq) FROM events x WHERE x.issue = e.issue AND x.type = e.type)');
+  db.exec('CREATE VIEW story_latest AS SELECT * FROM events e WHERE type = \'story_finished\' AND seq = (SELECT MAX(seq) FROM events x WHERE x.issue = e.issue AND x.type = e.type AND x.solution IS e.solution)');
   db.close();
   return { events: events.length, file: dbFile };
 }
