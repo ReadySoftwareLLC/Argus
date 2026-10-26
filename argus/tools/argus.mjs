@@ -29,7 +29,8 @@ const HELP = `argus <command> [options]
   status [--refresh]                  rebuild the board in status.md
   report-check <report.json>          enforce the final-report contract
   telemetry --claude <log.jsonl>      machine telemetry from a Claude Code transcript
-         [--numstat f] [--junit f] [--merge <final-report.json>] | --host copilot
+         [--numstat f] [--junit f] [--merge <final-report.json>]
+  telemetry --host copilot --log <events.jsonl> [same options]   (AIU, never dollars)
   ledger add <final-report.json>      append the story to ledger.jsonl (idempotent)
   costs                               rollup + budget guard (unknown cost is not zero)
   index [--sql "SELECT ..."]          rebuild or query the SQLite index
@@ -157,7 +158,17 @@ const commands = {
 
   telemetry(args) {
     const f = args.flags;
-    if (f.host === 'copilot') return print(buildCopilotTelemetry());
+    if (f.host === 'copilot') {
+      const read = (p) => (p ? fs.readFileSync(p, 'utf8') : undefined);
+      const res = buildCopilotTelemetry({ log: read(f.log), numstat: read(f.numstat), junit: read(f.junit) });
+      if (f.merge && f.log) {
+        const report = readJson(f.merge);
+        report.telemetry = res.telemetry;
+        writeFileEnsured(f.merge, `${JSON.stringify(report, null, 2)}\n`);
+        return print({ merged: f.merge, extras: res.extras });
+      }
+      return print(res);
+    }
     if (!f.claude) throw new ArgusError('usage: argus telemetry --claude <log.jsonl> [--numstat f] [--junit f] [--merge report.json] [--pricing f]  |  --host copilot');
     const read = (p) => (p ? fs.readFileSync(p, 'utf8') : undefined);
     const pricing = loadPricing(f.pricing ?? path.join(argusDir, 'pricing', 'anthropic.json'));

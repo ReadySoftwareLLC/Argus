@@ -177,8 +177,24 @@ test('CLI: pricing check passes for a fresh file and fails for a stale one', () 
   assert.equal(spawnSync('node', [CLI, 'pricing', '--file', fresh], { encoding: 'utf8' }).status, 0);
 });
 
-test('CLI: telemetry --host copilot returns all-null telemetry', () => {
-  const r = spawnSync('node', [CLI, 'telemetry', '--host', 'copilot'], { encoding: 'utf8' });
-  assert.equal(r.status, 0);
-  assert.equal(JSON.parse(r.stdout).extras.implemented, false);
+test('CLI: telemetry --host copilot with no log returns all-null telemetry; with a log it merges', () => {
+  const none = spawnSync('node', [CLI, 'telemetry', '--host', 'copilot'], { encoding: 'utf8' });
+  assert.equal(none.status, 0);
+  assert.equal(JSON.parse(none.stdout).extras.log_supplied, false);
+
+  const root = tmp();
+  const log = path.join(root, 'events.jsonl');
+  const D = (type, count, c) => ({ batchSize: 1e6, costPerBatch: c, tokenCount: count, tokenType: type });
+  fs.writeFileSync(log, [
+    JSON.stringify({ type: 'session.start', timestamp: '2026-10-26T23:00:00Z', data: { sessionId: 's', startTime: '2026-10-26T23:00:00Z' } }),
+    JSON.stringify({ type: 'session.usage_record', timestamp: '2026-10-26T23:00:05Z', data: { usage: { model: 'm', cost: 1, reasoningEffort: 'medium', accounting: { sourceSessionId: 's', sequence: 1 }, copilotUsage: { totalNanoAiu: 5e9, tokenDetails: [D('input', 1000, 1e9), D('cache_read', 0, 1e8), D('cache_write', 0, 1e9), D('output', 1000, 4e9)] } } } }),
+  ].join('\n'));
+  const rep = path.join(root, 'r.json');
+  const base = report('3'); delete base.telemetry;
+  fs.writeFileSync(rep, JSON.stringify(base));
+  const r = spawnSync('node', [CLI, 'telemetry', '--host', 'copilot', '--log', log, '--merge', rep], { encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  const merged = JSON.parse(fs.readFileSync(rep, 'utf8'));
+  assert.equal(merged.telemetry.cost_unit.value, 'aiu');
+  assert.equal(merged.telemetry.cost.value, 5);
 });

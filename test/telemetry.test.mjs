@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import { loadPricing, priceMessage, verifyPricing, rateEntryAt, pricingAgeDays } from '../argus/tools/lib/pricing.mjs';
 import { parseClaudeTranscript, normalizeUsage } from '../argus/tools/lib/claude-log.mjs';
 import { buildClaudeTelemetry, buildCopilotTelemetry, parseNumstat, parseJunit } from '../argus/tools/lib/telemetry.mjs';
+import { parseCopilotEvents } from '../argus/tools/lib/copilot-log.mjs';
 import { checkReport, TELEMETRY_KEYS } from '../argus/tools/lib/report.mjs';
 
 const pricing = loadPricing(new URL('../argus/pricing/anthropic.json', import.meta.url).pathname);
@@ -171,13 +172,113 @@ test('cost-state flagging an unknown model cost is never reported as a number', 
   assert.match(telemetry.cost.reason, /unknown cost/);
 });
 
-test('copilot parser is honest: every field null with a reason, credits never converted', () => {
+// Copilot CLI events. Token counts, AIU and rates are real values from a session log (no message text).
+const D = (type, count, costPerBatch) => ({ batchSize: 1000000, costPerBatch, tokenCount: count, tokenType: type, model: 'm' });
+const rec = (seq, model, effort, premium, nano, details, initiator = 'user', ts = '2026-10-26T23:01:13.330Z') => JSON.stringify({
+  type: 'session.usage_record', timestamp: ts,
+  data: { usage: { model, cost: premium, reasoningEffort: effort, initiator, accounting: { sourceSessionId: 's', sequence: seq }, copilotUsage: { totalNanoAiu: nano, tokenDetails: details } } },
+});
+const OPUS = (i, cr, cw, o) => [D('input', i, 400e9), D('cache_read', cr, 20e9), D('cache_write', cw, 500e9), D('output', o, 2000e9)];
+const LUNA = (i, o) => [D('input', i, 10e9), D('cache_read', 0, 1e9), D('cache_write', 0, 12.5e9), D('output', o, 50e9)];
+const SNAP = (over = {}) => ({
+  totalPremiumRequestCost: 16, totalNanoAiu: 18973510000, aiCreditsStatus: 'complete', totalApiDurationMs: 15197,
+  tokenDetails: { input: { tokenCount: 984 }, cache_read: { tokenCount: 32849 }, cache_write: { tokenCount: 33786 }, output: { tokenCount: 1083 } },
+  codeChanges: { linesAdded: 0, linesRemoved: 0 }, ...over,
+});
+function copilotLog({ shutdown = true, snap = SNAP(), dupe = false } = {}) {
+  const lines = [
+    JSON.stringify({ type: 'session.start', timestamp: '2026-10-26T23:01:08.183Z', data: { sessionId: 's', startTime: '2026-10-26T23:01:08.183Z' } }),
+    rec(1, 'claude-opus-5.5', 'medium', 15, 16924100000, OPUS(4, 0, 32849, 249)),
+    ...(dupe ? [rec(1, 'claude-opus-5.5', 'medium', 15, 16924100000, OPUS(4, 0, 32849, 249))] : []),
+    rec(2, 'claude-opus-5.5', 'medium', 15, 2020280000, OPUS(2, 32849, 937, 447), 'agent'),
+    rec(3, 'gpt-6-luna', 'high', 1, 29130000, LUNA(978, 387)),
+    // fusion events repeat usage already in the records and must not be summed
+    JSON.stringify({ type: 'session.fusion_completed', timestamp: '2026-10-26T23:01:40.000Z', data: { inputTokens: 67619, outputTokens: 1083, totalNanoAiu: 18973510000 } }),
+    JSON.stringify({ type: 'session.usage_checkpoint', timestamp: '2026-10-26T23:01:44.000Z', data: { accountingSnapshot: snap } }),
+  ];
+  if (shutdown) lines.push(JSON.stringify({ type: 'session.shutdown', timestamp: '2026-10-26T23:01:44.981Z', data: { shutdownType: 'routine', accountingSnapshot: snap } }));
+  return `${lines.join('\n')}\n`;
+}
+
+test('copilot: per-call usage records sum exactly to the session snapshot', () => {
+  const p = parseCopilotEvents(copilotLog());
+  assert.equal(p.records.calls, 3);
+  assert.deepEqual(p.records.tokens, { input: 984, cache_read: 32849, cache_write: 33786, output: 1083 });
+  assert.equal(p.records.nano_aiu, 18973510000);
+  assert.equal(p.records.premium, 16, 'agent-initiated calls carry a multiplier but are not premium requests');
+  assert.equal(p.reconciliation.reconciled, true);
+  assert.equal(p.totals.source, 'session.shutdown');
+  assert.deepEqual(p.models, ['claude-opus-5.5', 'gpt-6-luna']);
+  assert.deepEqual(p.efforts, ['medium', 'high']);
+  assert.equal(p.fusion_events_ignored, 1);
+});
+
+test("copilot: Copilot's own embedded rates reproduce its reported AIU for every call", () => {
+  const p = parseCopilotEvents(copilotLog());
+  assert.equal(p.records.rate_mismatch_calls, 0);
+  assert.equal(p.records.incomplete_calls, 0);
+  const bad = copilotLog().replace('16924100000', '16924100999');
+  assert.equal(parseCopilotEvents(bad).records.rate_mismatch_calls, 1);
+});
+
+test('copilot: a repeated sequence number is counted once', () => {
+  assert.equal(parseCopilotEvents(copilotLog({ dupe: true })).records.calls, 3);
+});
+
+test('copilot telemetry: AIU unit, uncached input, snapshot totals, wall duration, contract shapes', () => {
+  const { telemetry, extras } = buildCopilotTelemetry({ log: copilotLog(), numstat: '2\t1\ta.js\n' });
+  assert.equal(telemetry.cost.value, 18.97351);
+  assert.equal(telemetry.cost_unit.value, 'aiu');
+  assert.equal(telemetry.tokens_input.value, 984);
+  assert.equal(telemetry.tokens_cache_write.value, 33786);
+  assert.equal(telemetry.tokens_output.value, 1083);
+  assert.ok(Math.abs(telemetry.duration_seconds.value - 36.798) < 1e-6);
+  assert.deepEqual(telemetry.model.value, ['claude-opus-5.5', 'gpt-6-luna']);
+  assert.equal(telemetry.cost.note, undefined);
+  assert.equal(telemetry.files_changed.value, 1);
+  assert.equal(extras.premium_requests, 16);
+  assert.equal(extras.reconciliation.reconciled, true);
+  const report = { contract_version: 1, issue: '1', outcome: 'blocked', blocked_reason: 'x', pr: null, pr_reason: 'x', criteria: [], review: { dispatched: false }, telemetry, tangents: [] };
+  assert.deepEqual(checkReport(report), []);
+});
+
+test('copilot telemetry: a snapshot that disagrees with the records is reported, not hidden', () => {
+  const { telemetry, extras } = buildCopilotTelemetry({ log: copilotLog({ snap: SNAP({ totalNanoAiu: 20000000000 }) }) });
+  assert.equal(extras.reconciliation.reconciled, false);
+  assert.match(telemetry.cost.note, /do not reconcile/);
+  assert.equal(telemetry.cost.value, 20);
+});
+
+test('copilot telemetry: a session still running uses the last checkpoint and says so', () => {
+  const { telemetry } = buildCopilotTelemetry({ log: copilotLog({ shutdown: false }) });
+  assert.match(telemetry.cost.note, /has not shut down/);
+  assert.match(telemetry.duration_seconds.note, /not shut down/);
+});
+
+test('copilot telemetry: no snapshot at all falls back to summed records with a note', () => {
+  const log = copilotLog({ shutdown: false }).split('\n').filter((l) => !l.includes('usage_checkpoint')).join('\n');
+  const { telemetry } = buildCopilotTelemetry({ log });
+  assert.equal(telemetry.cost.value, 18.97351);
+  assert.match(telemetry.cost.note, /summed usage_record/);
+});
+
+test('copilot telemetry: no log supplied is null with a reason, never dollars', () => {
   const { telemetry, extras } = buildCopilotTelemetry();
-  assert.equal(extras.implemented, false);
+  assert.equal(extras.log_supplied, false);
   for (const k of TELEMETRY_KEYS) {
     assert.equal(telemetry[k].value, null);
     assert.match(telemetry[k].reason, /never converted to dollars/);
   }
+});
+
+test('rollup keeps AIU and dollars in separate buckets', async () => {
+  const { rollup, eventFromReport } = await import('../argus/tools/lib/ledger.mjs');
+  const mk = (issue, tel) => ({ contract_version: 1, issue, outcome: 'done', pr: { url: 'u', number: 1 }, criteria: [], review: { dispatched: true, verdict: 'pass', path: 'p' }, telemetry: tel, tangents: [] });
+  const cop = buildCopilotTelemetry({ log: copilotLog() }).telemetry;
+  const cl = buildClaudeTelemetry({ transcript: transcript(), pricing }).telemetry;
+  const r = rollup([eventFromReport(mk('1', cop)), eventFromReport(mk('2', cl))]);
+  assert.equal(r.cost.aiu, 18.97351);
+  assert.equal(r.cost.usd_api_equivalent, 2.9066679);
 });
 
 test('numstat and junit parsing', () => {

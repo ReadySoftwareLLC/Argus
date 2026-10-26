@@ -1,6 +1,7 @@
 // Builds final-report telemetry fields from machine sources. Every field is machine-sourced,
 // or null with a reason. Nothing here is estimated or guessed.
 import { parseClaudeTranscript } from './claude-log.mjs';
+import { parseCopilotEvents } from './copilot-log.mjs';
 import { verifyPricing } from './pricing.mjs';
 import { TELEMETRY_KEYS } from './report.mjs';
 
@@ -100,8 +101,76 @@ export function buildClaudeTelemetry({ transcript, pricing, numstat, junit }) {
   };
 }
 
-/** Copilot logs are not parsed yet: no verified sample of the format exists. Every field is null with that reason. */
-export function buildCopilotTelemetry() {
-  const reason = 'Copilot log parser is not implemented: no verified sample of the log format. Costs there are credits, not tokens, and are never converted to dollars.';
-  return { telemetry: Object.fromEntries(TELEMETRY_KEYS.map((k) => [k, unknown(reason)])), extras: { parser: 'copilot', implemented: false } };
+const COPILOT_NO_LOG = 'no Copilot events.jsonl supplied (--log). Copilot cost is reported in AIU and is never converted to dollars.';
+
+/**
+ * Telemetry from a Copilot CLI events.jsonl. With no log, every field is null with a reason.
+ * Cost unit is "aiu" (nano-AIU / 1e9, as reported). Never converted to dollars.
+ */
+export function buildCopilotTelemetry({ log, numstat, junit } = {}) {
+  const T = {};
+  if (log === undefined) {
+    for (const k of TELEMETRY_KEYS) T[k] = unknown(COPILOT_NO_LOG);
+    return { telemetry: T, extras: { parser: 'copilot', implemented: true, log_supplied: false } };
+  }
+  const p = parseCopilotEvents(log);
+  const tool = 'copilot events.jsonl';
+  const src = p.totals;
+  const notes = [];
+  if (!src) notes.push('no shutdown or checkpoint snapshot; summed usage_record events');
+  else if (src.source === 'session.usage_checkpoint') notes.push('session has not shut down; values are from the last usage checkpoint');
+  if (p.reconciliation && !p.reconciliation.reconciled) notes.push('usage records do not reconcile with the snapshot; snapshot reported');
+  if (p.records.rate_mismatch_calls) notes.push(`${p.records.rate_mismatch_calls} call(s) where embedded rates do not reproduce the reported AIU`);
+  const note = notes.length ? notes.join('; ') : undefined;
+  const tok = src?.tokens ?? p.records.tokens;
+  const nano = src ? src.nano_aiu : p.records.nano_aiu;
+  const ts = src?.source ?? 'usage_record sum';
+  const have = p.records.calls > 0 || Boolean(src);
+
+  T.model = p.models.length ? machine(p.models, tool) : unknown('no usage records in log');
+  T.reasoning_effort = p.efforts.length ? machine(p.efforts, tool) : unknown('no reasoning effort recorded in log');
+  const end = p.ended_at ?? p.last_event_at;
+  const wall = p.started_at && end ? (Date.parse(end) - Date.parse(p.started_at)) / 1000 : null;
+  T.duration_seconds = wall !== null && !Number.isNaN(wall)
+    ? machine(wall, tool, p.ended_at ? 'wall clock from session.start to session.shutdown' : 'wall clock from session.start to the last event; session has not shut down')
+    : unknown('no session start time or end in log');
+  for (const [field, k] of [['tokens_input', 'input'], ['tokens_output', 'output'], ['tokens_cache_read', 'cache_read'], ['tokens_cache_write', 'cache_write']]) {
+    T[field] = have ? machine(tok[k], `${tool} ${ts}`, note) : unknown('no token usage in log');
+  }
+  T.cost = have ? machine(nano / 1e9, `${tool} ${ts}`, note) : unknown('no usage in log');
+  T.cost_unit = have ? machine('aiu', `${tool} ${ts}`) : unknown('no usage in log');
+
+  if (numstat !== undefined) {
+    const s = parseNumstat(numstat);
+    T.files_changed = machine(s.files, 'git diff --numstat');
+    T.lines_added = machine(s.added, 'git diff --numstat', s.binary ? `${s.binary} binary file(s) have no line counts` : undefined);
+    T.lines_removed = machine(s.removed, 'git diff --numstat', s.binary ? `${s.binary} binary file(s) have no line counts` : undefined);
+  }
+  if (junit !== undefined) {
+    const j = parseJunit(junit);
+    T.tests_passed = machine(j.passed, 'junit.xml');
+    T.tests_failed = machine(j.failed, 'junit.xml');
+  }
+  for (const k of TELEMETRY_KEYS) {
+    if (T[k]) continue;
+    T[k] = unknown(k.startsWith('tests_') ? 'no junit.xml supplied' : 'no git numstat supplied');
+  }
+  return {
+    telemetry: T,
+    extras: {
+      parser: 'copilot',
+      implemented: true,
+      log_supplied: true,
+      premium_requests: src?.premium_requests ?? p.records.premium,
+      api_duration_ms: src?.api_duration_ms ?? null,
+      credits_status: src?.credits_status ?? null,
+      session_code_changes: src?.code_changes ?? null,
+      reconciliation: p.reconciliation,
+      records: p.records,
+      by_model: p.by_model,
+      fusion_events_ignored: p.fusion_events_ignored,
+      shutdown_type: p.shutdown_type,
+      bad_lines: p.bad_lines,
+    },
+  };
 }
