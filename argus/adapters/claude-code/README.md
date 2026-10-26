@@ -31,3 +31,6 @@ When `host.dispatch` is `manual`, run `argus plan <plan.json> --launch`, show th
 
 ## Telemetry source
 Claude Code writes the session log to `~/.claude/projects/<cwd with / replaced by ->/<session-id>.jsonl` (observed: cwd `/home/claude` gives `-home-claude`). The worker passes that path to `argus telemetry --claude`. The log contains Claude Code's own `cost-state` snapshots, which `argus` uses for cost and token totals.
+
+## Onboarding skill
+`argus/skills/onboarding/SKILL.md` is plain markdown any agent can follow. To have Claude Code discover it as a skill, copy the folder to `.claude/skills/argus-onboarding/` in the consuming repo.

@@ -46,10 +46,10 @@ GitHub has no atomic claim. Claim comment plus `argus:claimed` label, then re-re
 | --- | --- |
 | v0.1 | This release: config, discovery track, roles, templates, CLI, claim, plan, report contract |
 | v0.2 | Shipped: JSONL ledger, rebuildable SQLite index, Claude Code and Copilot CLI parsers, effective-dated pricing with drift check, budget guard rollup. Not shipped: VS Code chatSessions parser, scheduled pricing-update workflow |
-| v0.3 | `argus sync` vendoring with `argus.lock`, onboarding skill, budget guard wired into dispatch, cross-solution export |
+| v0.3 | Shipped: `argus sync` vendoring with `argus.lock`, budget guard wired into `plan` and `claim`. `argus onboard` plus an onboarding skill, one-way cross-solution `argus export` |
 | v0.4 | Prompt-learning loop: analyze outcomes by template version, propose template changes as PRs |
 
 ## Design decisions still open
-- SQLite index location is per solution. Cross-product learning is an optional one-way export to a primary solution.
+- SQLite index location is per solution. Cross-product learning is an optional one-way export to a primary solution (`argus export`, see `docs/telemetry.md`).
 - Pricing automation opens PRs against `pricing/`. Rates are never auto-merged.
 - The Claude Code adapter has no tested end-to-end dispatch yet. It is documented, not exercised in CI.
