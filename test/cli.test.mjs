@@ -115,6 +115,36 @@ test('plan --launch prints a manual-mode launch plan', () => {
   assert.match(r.stdout, /story 3: new worker session, prompt file orchestration\/3\/prompt.md/);
 });
 
+test('plan --manual forces the manual launch plan even when config says claude-code, and says why', () => {
+  const root = sandbox();
+  const cfgFile = path.join(root, 'argus.config.json');
+  fs.writeFileSync(cfgFile, JSON.stringify({ ...example, host: { dispatch: 'claude-code' } }));
+  const plan = path.join(root, 'plan.json');
+  fs.writeFileSync(plan, JSON.stringify({ stories: [{ id: '1' }, { id: '2' }] }));
+
+  const forced = run(root, 'plan', plan, '--manual');
+  assert.equal(forced.status, 0, forced.stderr);
+  assert.match(forced.stdout, /^Dispatch mode: manual \(forced by --manual for this run \(config host.dispatch is claude-code\)\)/);
+  assert.match(forced.stdout, /Wave 1: start these 2 sessions together/);
+
+  const normal = JSON.parse(run(root, 'plan', plan).stdout);
+  assert.deepEqual(normal.dispatch, { mode: 'claude-code', reason: 'config host.dispatch is claude-code' });
+
+  fs.writeFileSync(cfgFile, JSON.stringify(example));
+  const cfgManual = JSON.parse(run(root, 'plan', plan).stdout);
+  assert.deepEqual(cfgManual.dispatch, { mode: 'manual', reason: 'config host.dispatch is manual' });
+  assert.match(run(root, 'plan', plan, '--launch').stdout, /^Dispatch mode: manual \(config host.dispatch is manual\)/);
+});
+
+test('max_concurrent above 6 prints a non-fatal warning on stderr', () => {
+  const root = sandbox();
+  fs.writeFileSync(path.join(root, 'argus.config.json'), JSON.stringify({ ...example, limits: { ...example.limits, max_concurrent: 8 } }));
+  const r = run(root, 'config');
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stderr, /warning: limits.max_concurrent is 8.*up to 16/);
+  assert.equal(run(sandbox(), 'config').stderr, '');
+});
+
 test('derivedFields uses repo paths from config', () => {
   const root = sandbox();
   const cfg = loadConfig({ path: path.join(root, 'argus.config.json'), via: 't' });

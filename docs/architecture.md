@@ -38,6 +38,15 @@ One anchor repo holds `argus.config.json`. Its `repos` map lists every repo (UI,
 ## Config discovery
 `--config`, then `ARGUS_CONFIG`, then walk up from the working directory and the tool directory, then a single-sibling scan. The scan dedupes worktrees by resolved git identity. Zero matches is `null`, one is used, several distinct repos is an error.
 
+## Dispatch modes and defaults
+`host.dispatch` is `claude-code` or `manual`. `argus onboard --dispatch claude-code|manual` sets it; with no flag it writes `manual`, because Argus must work on hosts that cannot spawn agents. The onboarding skill asks the human rather than choosing.
+
+- `claude-code`: the orchestrator dispatches each worker as a Claude Code subagent, and the worker dispatches the reviewer. This relies on subagent nesting, which Claude Code allows by default up to three layers ([docs](https://code.claude.com/docs/en/sub-agents)).
+- `manual`: `argus plan --launch` prints a launch plan and the human opens the sessions.
+- `argus plan --manual` forces manual output for one run even when config says `claude-code`. Plan output records the mode used and why (`dispatch` in the JSON, or a first `Dispatch mode:` line in launch output).
+
+`limits.max_concurrent` defaults to 4. Each worker may also run a reviewer agent, so concurrent agents can reach 2x the limit. Config loading warns, without failing, when it is above 6.
+
 ## Claiming work
 GitHub has no atomic claim. Claim comment plus `argus:claimed` label, then re-read. The earliest claim comment wins and only the winner labels or assigns.
 

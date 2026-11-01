@@ -35,7 +35,7 @@
   },
   "limits": {
     "discovery_rounds": 2,
-    "max_concurrent": 3,
+    "max_concurrent": 4,
     "epic_budget_usd": null,
     "prompt_token_budget": 2500
   },

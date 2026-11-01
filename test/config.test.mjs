@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { discoverConfig, gitIdentity, validateConfig, loadConfig, applicablePolicies, requirementsPath } from '../argus/tools/lib/config.mjs';
+import { DEFAULT_LIMITS, configWarnings, discoverConfig, gitIdentity, validateConfig, loadConfig, applicablePolicies, requirementsPath } from '../argus/tools/lib/config.mjs';
 
 const example = JSON.parse(fs.readFileSync(new URL('../argus/argus.config.example.json', import.meta.url), 'utf8'));
 
@@ -102,7 +102,7 @@ test('loadConfig applies defaults and resolves paths', () => {
   const root = tmp();
   writeCfg(root);
   const cfg = loadConfig({ path: path.join(root, 'argus.config.json'), via: 'test' });
-  assert.equal(cfg.limits.max_concurrent, 3);
+  assert.equal(cfg.limits.max_concurrent, 4);
   assert.equal(cfg.host.dispatch, 'manual');
   assert.equal(cfg.repos.web.abs_path, root);
   assert.equal(cfg.repos.web.github, 'acme-co/acme-web');
@@ -122,4 +122,16 @@ test('policies filter by tags; untagged policies always apply', () => {
   const cfg = loadConfig({ path: path.join(root, 'argus.config.json'), via: 'test' });
   assert.deepEqual(applicablePolicies(cfg, []).map((p) => p.name), ['audit-trail']);
   assert.deepEqual(applicablePolicies(cfg, ['ui']).map((p) => p.name).sort(), ['audit-trail', 'money-display']);
+});
+
+test('max_concurrent default is 4, and warns (non-fatally) above 6', () => {
+  assert.equal(DEFAULT_LIMITS.max_concurrent, 4);
+  assert.deepEqual(configWarnings({ limits: { max_concurrent: 6 } }), []);
+  assert.deepEqual(configWarnings({}), []);
+  const w = configWarnings({ limits: { max_concurrent: 7 } });
+  assert.equal(w.length, 1);
+  assert.match(w[0], /reviewer/);
+  assert.match(w[0], /up to 14 \(2x the limit\)/);
+  assert.deepEqual(validateConfig({ ...example, limits: { max_concurrent: 9 } }), []);
+  assert.match(validateConfig({ ...example, limits: { max_concurrent: 0 } }).join(), /integer >= 1/);
 });
