@@ -97,3 +97,29 @@ test('ensureGitignore is idempotent and keeps existing lines', () => {
   assert.equal(ensureGitignore(d), false);
   assert.equal(fs.readFileSync(path.join(d, '.gitignore'), 'utf8'), 'node_modules/\n.argus/\n');
 });
+
+test('onboard --dispatch: absent writes manual, claude-code and manual are accepted, anything else is rejected', () => {
+  const d = tmp();
+  const dry = (...a) => cli(d, 'onboard', '--name', 'Shop', '--tracker', 'acme/shop', '--dry-run', ...a);
+  const none = JSON.parse(dry().stdout);
+  assert.equal(none.config.host.dispatch, 'manual');
+  assert.match(none.evidence.dispatch, /default: manual/);
+  const cc = JSON.parse(dry('--dispatch', 'claude-code').stdout);
+  assert.equal(cc.config.host.dispatch, 'claude-code');
+  assert.equal(cc.evidence.dispatch, 'given with --dispatch');
+  assert.equal(JSON.parse(dry('--dispatch', 'manual').stdout).config.host.dispatch, 'manual');
+  const bad = dry('--dispatch', 'bogus');
+  assert.equal(bad.status, 1);
+  assert.match(bad.stderr, /--dispatch must be claude-code or manual/);
+  // real write persists the choice
+  assert.equal(cli(d, 'onboard', '--name', 'Shop', '--tracker', 'acme/shop', '--dispatch', 'claude-code').status, 0);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(d, 'argus.config.json'), 'utf8')).host.dispatch, 'claude-code');
+});
+
+test('buildOnboardConfig defaults dispatch to manual and validates the value', () => {
+  const base = tmp();
+  const args = { base, name: 'S', tracker: 'o/r', anchor: 'a', detect: () => ({}) };
+  assert.equal(buildOnboardConfig(args).config.host.dispatch, 'manual');
+  assert.equal(buildOnboardConfig({ ...args, dispatch: 'claude-code' }).config.host.dispatch, 'claude-code');
+  assert.throws(() => buildOnboardConfig({ ...args, dispatch: 'x' }), /--dispatch must be/);
+});

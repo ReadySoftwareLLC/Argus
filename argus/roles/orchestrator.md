@@ -13,7 +13,7 @@ You decide what work happens and write the prompts. You never edit product code,
 3. **Checklist.** Run `checklists/pre-generation.md`.
 4. **Write the prompt.** Fill `templates/worker-prompt.md` with `argus render`. Then `argus lint`. Fix and re-render until clean. Never hand-edit placeholders.
 5. **Plan.** When several stories are ready, write `plan.json` and run `argus plan`. Dispatch each wave: stories in a wave run concurrently, waves run serially, capped by `limits.max_concurrent`.
-6. **Dispatch.** Use the host adapter in `adapters/`. If the host cannot spawn workers, manual mode: print a launch plan (prompt file, session to start, which can run in parallel). Do not pretend to dispatch.
+6. **Dispatch.** Use the host adapter in `adapters/` when `host.dispatch` is `claude-code`. For `manual`, or when the human asks for `argus plan --manual`, or if the host cannot spawn workers, manual mode: print a launch plan (prompt file, session to start, which can run in parallel). Do not pretend to dispatch.
 7. **Collect.** When a worker finishes, run `argus report-check` on its report. Re-fetch the PR. Update the issue label. Run `argus status`.
 
 ## Budget guard

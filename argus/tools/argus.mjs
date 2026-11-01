@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { ArgusError, parseArgs, readJson, writeFileEnsured } from './lib/util.mjs';
 import { discoverConfig, loadConfig, requirementsPath, storyDir, applicablePolicies } from './lib/config.mjs';
 import { findTemplate, renderTemplate, lintPrompt } from './lib/render.mjs';
-import { buildPlan, launchPlan } from './lib/plan.mjs';
+import { buildPlan, launchPlan, resolveDispatch } from './lib/plan.mjs';
 import { checkReport } from './lib/report.mjs';
 import { createTracker, ensureLabels } from './lib/tracker.mjs';
 import { buildOnboardConfig, ensureGitignore, parseAlso } from './lib/onboard.mjs';
@@ -23,13 +23,13 @@ const argusDir = path.resolve(toolDir, '..');
 const HELP = `argus <command> [options]
 
   onboard --name <n> [--tracker o/r] [--anchor k] [--also k=path,...] [--primary p]
-         [--labels] [--dry-run] [--force]   write argus.config.json from detected facts (nothing guessed)
+         [--dispatch claude-code|manual] [--labels] [--dry-run] [--force]   write argus.config.json from detected facts (nothing guessed)
   config [--policies]                 resolve + validate config
   init <issue>                        scaffold <orchestration>/<issue>/ and base files
   render <template> --data <f.json>   fill a template; fails on any missing field
          [--story <issue>] [--out f]  --story injects config-derived fields
   lint <prompt.md>                    size budget, placeholders, required sections
-  plan <plan.json> [--launch]         validate story graph, print waves (or manual launch plan)
+  plan <plan.json> [--launch] [--manual]   validate story graph, print waves (or manual launch plan). --manual forces manual output for this run
   claim <issue> --worker <id>         claim protocol (earliest claim wins)
   status [--refresh]                  rebuild the board in status.md
   report-check <report.json>          enforce the final-report contract
@@ -50,7 +50,9 @@ global: --config <path>  --json`;
 function load(flags) {
   const found = discoverConfig({ flag: flags.config, toolDir });
   if (!found) throw new ArgusError('No argus.config.json found. Use --config, set ARGUS_CONFIG, or run from inside the consuming repo.');
-  return loadConfig(found);
+  const config = loadConfig(found);
+  for (const w of config._warnings ?? []) process.stderr.write(`warning: ${w}\n`);
+  return config;
 }
 
 const print = (v) => process.stdout.write(typeof v === 'string' ? `${v}\n` : `${JSON.stringify(v, null, 2)}\n`);
@@ -91,6 +93,7 @@ const commands = {
       base, name: typeof f.name === 'string' ? f.name : undefined, tracker: typeof f.tracker === 'string' ? f.tracker : undefined,
       anchor: typeof f.anchor === 'string' ? f.anchor : undefined, also: parseAlso(typeof f.also === 'string' ? f.also : ''),
       primary: typeof f.primary === 'string' ? f.primary : undefined,
+      dispatch: f.dispatch,
     });
     if (f['dry-run']) return print({ dry_run: true, would_write: file, config, evidence, unset });
     if (fs.existsSync(file) && !f.force) throw new ArgusError(`${file} already exists. Edit it, or pass --force to replace it.`);
@@ -155,15 +158,16 @@ const commands = {
     const config = load(args.flags);
     const res = buildPlan(readJson(file).stories ?? [], { maxConcurrent: config.limits.max_concurrent, repos: Object.keys(config.repos) });
     const budget = dispatchBudget(config);
+    const dispatch = resolveDispatch(config, { manual: !!args.flags.manual });
     if (res.ok && budget.over_budget && !args.flags['override-budget']) {
       print({ ok: false, halted: 'budget', budget, action: 'Known cost is at or over limits.epic_budget_usd. Do not dispatch. A human can raise the limit or pass --override-budget.' });
       process.exitCode = 1;
       return;
     }
-    if (res.ok && args.flags.launch) {
-      const launch = launchPlan(res, (id) => path.relative(config._base, path.join(storyDir(config, id), 'prompt.md')));
+    if (res.ok && (args.flags.launch || args.flags.manual)) {
+      const launch = `Dispatch mode: ${dispatch.mode} (${dispatch.reason})\n${launchPlan(res, (id) => path.relative(config._base, path.join(storyDir(config, id), 'prompt.md')))}`;
       print(budget.limit_usd == null && budget.complete ? launch : `${launch}\nBudget: ${budget.message}${budget.remaining_usd == null ? '' : ` (remaining $${budget.remaining_usd.toFixed(2)})`}`);
-    } else print({ ...res, budget });
+    } else print({ ...res, dispatch, budget });
     if (!res.ok) process.exitCode = 1;
   },
 

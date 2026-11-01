@@ -127,7 +127,19 @@ export function validateConfig(cfg) {
   return errs;
 }
 
-export const DEFAULT_LIMITS = { discovery_rounds: 2, max_concurrent: 3, epic_budget_usd: null, prompt_token_budget: 2500 };
+export const DEFAULT_LIMITS = { discovery_rounds: 2, max_concurrent: 4, epic_budget_usd: null, prompt_token_budget: 2500 };
+
+export const CONCURRENCY_WARN_ABOVE = 6;
+
+/** Non-fatal advice. Returns an array of warning strings; never blocks loading. */
+export function configWarnings(cfg) {
+  const warns = [];
+  const n = cfg?.limits?.max_concurrent;
+  if (Number.isInteger(n) && n > CONCURRENCY_WARN_ABOVE) {
+    warns.push(`limits.max_concurrent is ${n} (above ${CONCURRENCY_WARN_ABOVE}). Each worker may also run a reviewer agent, so actual concurrent agents can be up to ${n * 2} (2x the limit).`);
+  }
+  return warns;
+}
 
 /** Load, validate, and resolve paths. Throws with all errors listed. */
 export function loadConfig(found) {
@@ -145,6 +157,7 @@ export function loadConfig(found) {
     limits: { ...DEFAULT_LIMITS, ...(cfg.limits ?? {}) },
     host: { dispatch: 'manual', ...(cfg.host ?? {}) },
     repos,
+    _warnings: configWarnings(cfg),
     _file: found.path,
     _via: found.via,
     _base: base,

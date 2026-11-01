@@ -71,7 +71,7 @@
       "additionalProperties": false,
       "properties": {
         "discovery_rounds": { "type": "integer", "minimum": 1, "default": 2 },
-        "max_concurrent": { "type": "integer", "minimum": 1, "default": 3 },
+        "max_concurrent": { "type": "integer", "minimum": 1, "default": 4, "description": "Values above 6 trigger a warning: each worker may also run a reviewer, so concurrent agents can reach 2x this limit." },
         "epic_budget_usd": { "type": ["number", "null"], "minimum": 0, "default": null, "description": "null means no cap." },
         "prompt_token_budget": { "type": "integer", "minimum": 200, "default": 2500, "description": "Max estimated tokens for a generated worker prompt." }
       }

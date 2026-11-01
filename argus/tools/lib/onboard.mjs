@@ -50,13 +50,14 @@ export function parseAlso(s) {
  * Build the config. `answers` are what the human supplied; `detect(dir)` reads a repo folder.
  * Returns { config, evidence, unset }.
  */
-export function buildOnboardConfig({ base, name, tracker, anchor, also = [], orchestrationDir = 'orchestration', primary, detect = (d) => detectRepo(d) }) {
-  if (!name || typeof name !== 'string') throw new ArgusError('usage: argus onboard --name "<product name>" [--tracker owner/repo] [--anchor key] [--also key=path,...]');
+export function buildOnboardConfig({ base, name, tracker, anchor, also = [], orchestrationDir = 'orchestration', primary, dispatch, detect = (d) => detectRepo(d) }) {
+  if (!name || typeof name !== 'string') throw new ArgusError('usage: argus onboard --name "<product name>" [--tracker owner/repo] [--anchor key] [--also key=path,...] [--dispatch claude-code|manual]');
   const anchorKey = anchor ?? (path.basename(base).replace(/[^\w-]+/g, '-').replace(/^-+|-+$/g, '') || 'main');
   if (!KEY.test(anchorKey)) throw new ArgusError(`anchor key "${anchorKey}" is not usable. Pass --anchor <key> (letters, digits, - and _).`);
   const entries = [{ key: anchorKey, path: '.' }, ...also];
   if (new Set(entries.map((e) => e.key)).size !== entries.length) throw new ArgusError('Repo keys must be unique (the anchor key is also taken by --also).');
 
+  if (dispatch !== undefined && dispatch !== 'claude-code' && dispatch !== 'manual') throw new ArgusError(`--dispatch must be claude-code or manual (got "${dispatch}")`);
   const evidence = {};
   const unset = [];
   const repos = {};
@@ -84,8 +85,9 @@ export function buildOnboardConfig({ base, name, tracker, anchor, also = [], orc
     anchor: anchorKey,
     repos,
     tracker: { type: 'github', repo: trackerRepo },
-    host: { dispatch: 'manual' },
+    host: { dispatch: dispatch ?? 'manual' },
   };
+  evidence.dispatch = dispatch ? 'given with --dispatch' : 'default: manual (no --dispatch given; manual works with hosts that cannot spawn agents)';
   if (primary) config.primary = primary;
   unset.push('product.facts_path: not set (no file of product facts for discovery)');
   unset.push('policies: none recorded (add standing policies as the human states them, see argus/discovery/standing-policies.md)');

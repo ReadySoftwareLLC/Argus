@@ -20,10 +20,13 @@ If `argus/` is missing: `node <argus checkout>/argus/tools/argus.mjs sync --from
 - Tracker repo (`owner/name`), only if the anchor has no GitHub remote
 - Other repos in the solution as `key=path` (UI, service, database)
 - Budget cap in USD, or none
+- Dispatch mode. Ask; do not pick for the human:
+  - `claude-code`: the orchestrator launches workers as Claude Code subagents, and each worker dispatches its own reviewer subagent. Needs a host that can spawn agents.
+  - `manual`: Argus prints a launch plan and the human opens each session. Works with any host. This is what `onboard` writes when `--dispatch` is absent.
 Do not ask about test commands, branches or remotes: they are detected, or left unset.
 
 ## 4. Write the config
-Preview: `node argus/tools/argus.mjs onboard --name "<name>" [--tracker o/r] [--also api=../api] --dry-run`
+Preview: `node argus/tools/argus.mjs onboard --name "<name>" [--tracker o/r] [--also api=../api] --dispatch <claude-code|manual> --dry-run`
 Read `evidence` (where each value came from) and `unset` (what was not found). Then run it without `--dry-run`, adding `--labels` to create the state labels.
 
 ## 5. Fill the gaps the human states

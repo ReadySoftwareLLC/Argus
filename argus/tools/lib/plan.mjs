@@ -83,7 +83,7 @@ export function topoWaves(stories) {
  * Each sub-wave is chunked to maxConcurrent.
  * Returns { ok, errors, waves: [{ wave, stories: [ids] }], serialized: [{ story, because, overlaps }] }.
  */
-export function buildPlan(stories, { maxConcurrent = 3, repos } = {}) {
+export function buildPlan(stories, { maxConcurrent = 4, repos } = {}) {
   const errors = validateStories(stories);
   if (repos) {
     for (const s of stories) if (s.repo && !repos.includes(s.repo)) errors.push(`story ${s.id} uses unknown repo ${s.repo}`);
@@ -143,4 +143,17 @@ export function launchPlan(plan, promptFor) {
     for (const id of w.stories) lines.push(`  - story ${id}: new worker session, prompt file ${promptFor(id)}`);
   }
   return lines.join('\n');
+}
+
+/**
+ * Which dispatch mode this run uses, and why. `manual` (the --manual flag) wins over config.
+ * Returns { mode, reason }.
+ */
+export function resolveDispatch(config, { manual = false, launch = false } = {}) {
+  const configured = config?.host?.dispatch ?? 'manual';
+  if (manual) {
+    return { mode: 'manual', reason: configured === 'manual' ? 'forced by --manual (config host.dispatch is also manual)' : `forced by --manual for this run (config host.dispatch is ${configured})` };
+  }
+  if (configured === 'manual') return { mode: 'manual', reason: 'config host.dispatch is manual' };
+  return { mode: configured, reason: `config host.dispatch is ${configured}` };
 }
